@@ -17,20 +17,53 @@
       <!-- 选择题库 -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">选择题库</label>
-        <select 
-          v-model="selectedBankId" 
-          class="input-field"
-          @change="onBankChange"
-        >
-          <option value="">请选择题库</option>
-          <option 
-            v-for="bank in questionStore.questionBanks" 
-            :key="bank.id" 
-            :value="bank.id"
+        <div class="relative">
+          <div 
+            @click="toggleDropdown"
+            class="input-field cursor-pointer flex items-center justify-between"
           >
-            {{ bank.name }} ({{ bank.questions.length }} 题)
-          </option>
-        </select>
+            <span class="text-gray-900">
+              {{ selectedBankName || '请选择题库' }}
+            </span>
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </div>
+          
+          <!-- 自定义下拉选项 -->
+          <div 
+            v-if="showDropdown" 
+            class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+          >
+            <div 
+              @click="selectBank('')"
+              class="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-500"
+            >
+              请选择题库
+            </div>
+            <div 
+              v-for="bank in questionStore.questionBanks" 
+              :key="bank.id"
+              class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between group"
+            >
+              <span 
+                @click="selectBank(bank.id)"
+                class="flex-1 text-gray-900"
+              >
+                {{ bank.name }} ({{ bank.questions.length }} 题)
+              </span>
+              <button 
+                @click.stop="deleteBankWithConfirm(bank)"
+                class="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity ml-2"
+                title="删除题库"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 题库信息 -->
@@ -161,11 +194,71 @@
         <!-- 答案输入 -->
         <div class="mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-2">您的答案</label>
-          <textarea 
-            v-model="currentAnswer"
-            placeholder="请输入您的答案..."
-            class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-          ></textarea>
+          
+          <!-- 选择题 -->
+          <div v-if="currentQuestion.type === 'choice'" class="space-y-3">
+            <label 
+              v-for="(option, index) in currentQuestion.options" 
+              :key="index"
+              class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+              :class="currentAnswer === getOptionValue(option) ? 'border-primary-500 bg-primary-50' : 'border-gray-300'"
+            >
+              <input 
+                type="radio" 
+                :value="getOptionValue(option)" 
+                v-model="currentAnswer"
+                class="mr-3 text-primary-600 focus:ring-primary-500"
+              >
+              <span class="text-gray-800">{{ option }}</span>
+            </label>
+          </div>
+          
+          <!-- 判断题 -->
+          <div v-else-if="currentQuestion.type === 'judge'" class="grid grid-cols-2 gap-4">
+            <label 
+              class="flex items-center justify-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+              :class="currentAnswer === '正确' ? 'border-green-500 bg-green-50' : 'border-gray-300'"
+            >
+              <input 
+                type="radio" 
+                value="正确" 
+                v-model="currentAnswer"
+                class="mr-3 text-green-600 focus:ring-green-500"
+              >
+              <span class="text-lg font-medium text-green-700">✓ 正确</span>
+            </label>
+            <label 
+              class="flex items-center justify-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+              :class="currentAnswer === '错误' ? 'border-red-500 bg-red-50' : 'border-gray-300'"
+            >
+              <input 
+                type="radio" 
+                value="错误" 
+                v-model="currentAnswer"
+                class="mr-3 text-red-600 focus:ring-red-500"
+              >
+              <span class="text-lg font-medium text-red-700">✗ 错误</span>
+            </label>
+          </div>
+          
+          <!-- 填空题 -->
+          <div v-else-if="currentQuestion.type === 'fill'">
+            <input 
+              v-model="currentAnswer"
+              type="text"
+              placeholder="请输入答案..."
+              class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+          </div>
+          
+          <!-- 问答题 -->
+          <div v-else>
+            <textarea 
+              v-model="currentAnswer"
+              placeholder="请输入您的答案..."
+              class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            ></textarea>
+          </div>
         </div>
 
         <!-- 练习模式下的标准答案 -->
@@ -177,6 +270,12 @@
         <!-- 操作按钮 -->
         <div class="flex justify-between">
           <div class="space-x-4">
+            <button 
+              @click="exitQuiz"
+              class="btn-secondary bg-red-100 text-red-700 hover:bg-red-200"
+            >
+              退出答题
+            </button>
             <button 
               v-if="currentQuestionIndex > 0" 
               @click="previousQuestion"
@@ -258,7 +357,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuestionStore, useAIStore } from '../store'
 
@@ -273,10 +372,17 @@ const quizMode = ref('practice')
 const currentQuestionIndex = ref(0)
 const currentAnswer = ref('')
 const showAnswer = ref(false)
+const showDropdown = ref(false)
 
 // 计算属性
 const selectedBank = computed(() => {
   return questionStore.questionBanks.find(bank => bank.id === selectedBankId.value)
+})
+
+const selectedBankName = computed(() => {
+  if (!selectedBankId.value) return ''
+  const bank = selectedBank.value
+  return bank ? `${bank.name} (${bank.questions.length} 题)` : ''
 })
 
 const availableTypes = computed(() => {
@@ -323,6 +429,23 @@ watch(currentAnswer, (newAnswer) => {
 })
 
 // 方法
+const toggleDropdown = () => {
+  showDropdown.value = !showDropdown.value
+}
+
+const selectBank = (bankId) => {
+  selectedBankId.value = bankId
+  showDropdown.value = false
+  if (bankId && selectedBank.value) {
+    questionStore.selectBank(selectedBankId.value)
+    selectedTypes.value = [...availableTypes.value] // 默认选择所有题型
+    questionCount.value = Math.min(10, maxQuestions.value)
+  } else {
+    selectedTypes.value = []
+    questionCount.value = 10
+  }
+}
+
 const onBankChange = () => {
   if (selectedBank.value) {
     questionStore.selectBank(selectedBankId.value)
@@ -375,6 +498,69 @@ const getQuestionButtonClass = (index) => {
   }
   return 'bg-gray-300 text-gray-700 hover:bg-gray-400'
 }
+
+// 提取选择题选项的值（去掉A. B. C. D.前缀）
+const getOptionValue = (option) => {
+  if (typeof option === 'string') {
+    // 如果选项格式是 "A. 选项内容"，提取选项字母
+    const match = option.match(/^([A-D])\.\s*(.+)$/)
+    if (match) {
+      return match[1] // 返回选项字母 A, B, C, D
+    }
+  }
+  return option
+}
+
+const exitQuiz = () => {
+  const confirmed = confirm('确定要退出当前答题吗？未保存的答案将会丢失。')
+  if (confirmed) {
+    // 清除当前答题状态
+    questionStore.currentQuiz = null
+    // 重置相关状态
+    selectedBankId.value = ''
+    selectedTypes.value = []
+    currentQuestionIndex.value = 0
+    currentAnswer.value = ''
+    showAnswer.value = false
+  }
+}
+
+const deleteBankWithConfirm = (bank) => {
+  const confirmed = confirm(`确定要删除题库「${bank.name}」吗？\n\n此操作不可撤销，题库中的所有题目都将被永久删除。`)
+  if (confirmed) {
+    // 如果删除的是当前选中的题库，需要重置状态
+    if (selectedBankId.value === bank.id) {
+      selectedBankId.value = ''
+      selectedTypes.value = []
+      questionStore.currentBank = null
+    }
+    
+    // 删除题库
+    questionStore.deleteBank(bank.id)
+    
+    // 关闭下拉框
+    showDropdown.value = false
+    
+    // 显示删除成功提示
+    alert(`题库「${bank.name}」已成功删除`)
+  }
+}
+
+// 点击外部关闭下拉框
+const handleClickOutside = (event) => {
+  const dropdown = event.target.closest('.relative')
+  if (!dropdown) {
+    showDropdown.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 
 const finishQuiz = async () => {
   if (!currentQuiz.value) return

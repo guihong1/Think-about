@@ -398,6 +398,261 @@ ${questionAnswerPairs}
       throw error
     }
   }
+
+  /**
+   * 提取文档内容
+   */
+  async extractDocumentContent(files) {
+    const contents = []
+    
+    for (const file of files) {
+      try {
+        const extension = file.name.toLowerCase().split('.').pop()
+        let content = ''
+        
+        switch (extension) {
+          case 'txt':
+            content = await this.readTextFile(file)
+            break
+          case 'doc':
+          case 'docx':
+            content = await this.readWordFile(file)
+            break
+          case 'pdf':
+            content = await this.readPdfFile(file)
+            break
+          default:
+            console.warn(`不支持的文件格式: ${extension}`)
+            continue
+        }
+        
+        contents.push({
+          filename: file.name,
+          content: content.trim()
+        })
+      } catch (error) {
+        console.error(`读取文件 ${file.name} 失败:`, error)
+      }
+    }
+    
+    return contents
+  }
+
+  /**
+   * 读取文本文件
+   */
+  async readTextFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.onerror = (e) => reject(e)
+      reader.readAsText(file, 'UTF-8')
+    })
+  }
+
+  /**
+   * 读取Word文件（简化版，实际需要专门的库）
+   */
+  async readWordFile(file) {
+    // 这里是简化实现，实际应用中需要使用mammoth.js等库
+    console.warn('Word文件解析功能需要额外的库支持')
+    return `Word文件内容提取功能开发中... 文件名: ${file.name}`
+  }
+
+  /**
+   * 读取PDF文件（简化版，实际需要专门的库）
+   */
+  async readPdfFile(file) {
+    // 这里是简化实现，实际应用中需要使用pdf.js等库
+    console.warn('PDF文件解析功能需要额外的库支持')
+    return `PDF文件内容提取功能开发中... 文件名: ${file.name}`
+  }
+
+  /**
+   * 构建题目生成提示词
+   */
+  buildQuestionGenerationPrompt(documentContents, questionConfig) {
+    const { selectedTypes, questionCounts, difficulty } = questionConfig
+    
+    const typeRequests = selectedTypes.map(type => {
+      const typeLabels = {
+        choice: '选择题',
+        fill: '填空题',
+        essay: '问答题',
+        judge: '判断题'
+      }
+      return `${typeLabels[type] || type}: ${questionCounts[type]}道`
+    }).join('，')
+    
+    const documentText = documentContents.map(doc => 
+      `文件：${doc.filename}\n内容：${doc.content}`
+    ).join('\n\n')
+    
+    return `你是一个专业的教育题目生成AI助手。请根据以下学习资料生成高质量的题库：
+
+学习资料：
+${documentText}
+
+生成要求：
+1. 题目类型和数量：${typeRequests}
+2. 难度分布：简单${difficulty.easy}%，中等${difficulty.medium}%，困难${difficulty.hard}%
+3. 题目必须基于提供的学习资料内容
+4. 确保题目质量高，覆盖资料的核心知识点
+5. 选择题需要提供4个选项（A、B、C、D）
+6. 填空题用___表示空白处
+7. 问答题要求答案详细完整
+8. 判断题答案为"正确"或"错误"
+
+请按照以下JSON格式返回生成的题目：
+{
+  "questions": [
+    {
+      "question": "题目内容",
+      "answer": "标准答案",
+      "type": "choice|fill|essay|judge",
+      "difficulty": "easy|medium|hard",
+      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"] // 仅选择题需要
+    }
+  ]
+}
+
+注意：
+- 必须返回有效的JSON格式
+- questions数组长度必须等于要求的题目总数
+- 每道题目都要有完整的信息
+- 难度分布要符合要求的百分比`
+  }
+
+  /**
+   * 生成题目
+   */
+  async generateQuestions(files, questionConfig) {
+    try {
+      // 提取文档内容
+      const documentContents = await this.extractDocumentContent(files)
+      
+      if (documentContents.length === 0) {
+        throw new Error('无法提取文档内容')
+      }
+      
+      // 构建生成提示词
+      const prompt = this.buildQuestionGenerationPrompt(documentContents, questionConfig)
+      
+      // 调用AI生成题目
+      const response = await this.callAI(prompt)
+      const result = this.parseQuestionGenerationResponse(response)
+      
+      return result.questions || []
+    } catch (error) {
+      console.error('题目生成失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 解析题目生成响应
+   */
+  parseQuestionGenerationResponse(response) {
+    try {
+      // 尝试直接解析JSON
+      return JSON.parse(response)
+    } catch (error) {
+      // 如果直接解析失败，尝试提取JSON部分
+      const jsonMatch = response.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        try {
+          return JSON.parse(jsonMatch[0])
+        } catch (e) {
+          console.error('JSON解析失败:', e)
+        }
+      }
+      
+      // 如果都失败了，返回空结果
+      console.error('题目生成响应解析失败')
+      return { questions: [] }
+    }
+  }
+
+  /**
+   * 生成模拟题目（用于测试）
+   */
+  generateMockQuestions(questionConfig) {
+    const { selectedTypes, questionCounts, difficulty } = questionConfig
+    const questions = []
+    
+    selectedTypes.forEach(type => {
+      const count = questionCounts[type] || 0
+      for (let i = 0; i < count; i++) {
+        const difficultyLevel = this.getDifficultyForIndex(i, count, difficulty)
+        questions.push(this.createMockQuestion(type, difficultyLevel, i + 1))
+      }
+    })
+    
+    return questions
+  }
+
+  /**
+   * 根据索引分配难度
+   */
+  getDifficultyForIndex(index, total, difficultyConfig) {
+    const ratio = index / total
+    if (ratio < difficultyConfig.easy / 100) return 'easy'
+    if (ratio < (difficultyConfig.easy + difficultyConfig.medium) / 100) return 'medium'
+    return 'hard'
+  }
+
+  /**
+   * 创建模拟题目
+   */
+  createMockQuestion(type, difficulty, index) {
+    const typeLabels = {
+      choice: '选择题',
+      fill: '填空题',
+      essay: '问答题',
+      judge: '判断题'
+    }
+    
+    const difficultyLabels = {
+      easy: '简单',
+      medium: '中等',
+      hard: '困难'
+    }
+    
+    const question = {
+      question: `这是一道${difficultyLabels[difficulty]}的${typeLabels[type]}示例 ${index}`,
+      type: type,
+      difficulty: difficulty
+    }
+    
+    // 根据题型设置不同的答案和选项
+    switch (type) {
+      case 'choice':
+        question.options = [
+          'A. 第一个选项',
+          'B. 第二个选项',
+          'C. 第三个选项',
+          'D. 第四个选项'
+        ]
+        question.answer = 'A' // 选择题答案为选项字母
+        break
+        
+      case 'judge':
+        question.answer = Math.random() > 0.5 ? '正确' : '错误'
+        break
+        
+      case 'fill':
+        question.question = `请填空：这是一道${difficultyLabels[difficulty]}的填空题，空白处应该填入___。`
+        question.answer = '答案'
+        break
+        
+      case 'essay':
+      default:
+        question.answer = `这是一道${difficultyLabels[difficulty]}问答题的详细答案内容。答案应该包含关键要点和详细解释。`
+        break
+    }
+    
+    return question
+  }
 }
 
 // 创建单例实例
