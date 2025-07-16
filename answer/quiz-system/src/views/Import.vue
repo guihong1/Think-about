@@ -46,6 +46,9 @@
     <!-- 步骤1: 文件上传 -->
     <div v-if="currentStep === 1" class="card">
       <h2 class="text-xl font-semibold text-gray-900 mb-4">上传学习资料</h2>
+      <!-- @dragover.prevent：防止浏览器默认行为（否则拖进来的文件不会触发 drop）。
+           @dragenter.prevent：用户拖进区域时高亮。
+           @drop="handleFileDrop"：当用户释放鼠标，执行处理函数。 -->
       <div 
         @drop="handleFileDrop"
         @dragover.prevent
@@ -283,7 +286,7 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">问题</label>
                 <textarea 
-                  v-model="question.question"
+                  v-model="editForm.question"
                   class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   rows="2"
                 ></textarea>
@@ -291,7 +294,7 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">答案</label>
                 <textarea 
-                  v-model="question.answer"
+                  v-model="editForm.answer"
                   class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   rows="2"
                 ></textarea>
@@ -299,7 +302,7 @@
               <div class="flex items-center space-x-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
-                  <select v-model="question.type" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <select v-model="editForm.type" class="border border-gray-300 rounded px-2 py-1 text-sm">
                     <option v-for="type in questionTypes" :key="type.value" :value="type.value">
                       {{ type.label }}
                     </option>
@@ -307,7 +310,7 @@
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">难度</label>
-                  <select v-model="question.difficulty" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <select v-model="editForm.difficulty" class="border border-gray-300 rounded px-2 py-1 text-sm">
                     <option value="easy">简单</option>
                     <option value="medium">中等</option>
                     <option value="hard">困难</option>
@@ -397,6 +400,7 @@ const isGenerating = ref(false)
 const generationProgress = ref('')
 const generatedQuestions = ref([])
 const editingIndex = ref(-1)
+const editForm=ref(null)
 
 // 题目类型配置
 const questionTypes = ref([
@@ -594,11 +598,23 @@ const generateQuestions = async () => {
 // 编辑题目
 const editQuestion = (index) => {
   editingIndex.value = index
+  const original = generatedQuestions.value[index];
+  editForm.value = {
+    question: original.question,
+    answer: original.answer,
+    type: original.type,
+    difficulty: original.difficulty
+  };
 }
 
 // 保存题目
 const saveQuestion = (index) => {
+  if(editForm.value)
+{
+  generatedQuestions.value[index] = {...editForm.value}
+}
   editingIndex.value = -1
+  editForm.value = null
   // 这里可以添加验证逻辑
 }
 
