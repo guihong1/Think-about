@@ -402,41 +402,55 @@ ${questionAnswerPairs}
   /**
    * 提取文档内容
    */
-  async extractDocumentContent(files) {
-    const contents = []
-    
-    for (const file of files) {
-      try {
-        const extension = file.name.toLowerCase().split('.').pop()
-        let content = ''
-        
-        switch (extension) {
-          case 'txt':
-            content = await this.readTextFile(file)
-            break
-          case 'doc':
-          case 'docx':
-            content = await this.readWordFile(file)
-            break
-          case 'pdf':
-            content = await this.readPdfFile(file)
-            break
-          default:
-            console.warn(`不支持的文件格式: ${extension}`)
-            continue
-        }
-        
+ async extractDocumentContent(files) {
+  const contents = []
+  const maxFileSize = 10 * 1024 * 1024 // 10MB限制
+  
+  for (const file of files) {
+    try {
+      // 检查文件大小
+      if (file.size > maxFileSize) {
+        console.warn(`文件 ${file.name} 过大 (${(file.size / 1024 / 1024).toFixed(2)}MB)，跳过处理`)
+        continue
+      }
+      
+      const extension = file.name.toLowerCase().split('.').pop()
+      let content = ''
+      
+      switch (extension) {
+        case 'txt':
+          content = await this.readTextFile(file)
+          break
+        case 'doc':
+        case 'docx':
+          content = await this.readWordFile(file)
+          break
+        case 'pdf':
+          content = await this.readPdfFile(file)
+          break
+        default:
+          console.warn(`不支持的文件格式: ${extension}`)
+          continue
+      }
+      
+      // 只有当内容不为空且不是错误信息时才添加
+      if (content && content.trim() && !content.startsWith('Word文件解析失败') && !content.startsWith('PDF文件解析失败')) {
         contents.push({
           filename: file.name,
-          content: content.trim()
+          content: content.trim(),
+          size: file.size,
+          type: extension
         })
-      } catch (error) {
-        console.error(`读取文件 ${file.name} 失败:`, error)
+      } else {
+        console.warn(`文件 ${file.name} 解析结果为空或失败`)
       }
+    } catch (error) {
+      console.error(`读取文件 ${file.name} 失败:`, error)
     }
-    
-    return contents
   }
+  
+  return contents
+}
 
   /**
    * 读取文本文件
@@ -451,23 +465,45 @@ ${questionAnswerPairs}
   }
 
   /**
-   * 读取Word文件（简化版，实际需要专门的库）
-   */
-  async readWordFile(file) {
-    // 这里是简化实现，实际应用中需要使用mammoth.js等库
-    console.warn('Word文件解析功能需要额外的库支持')
-    return `Word文件内容提取功能开发中... 文件名: ${file.name}`
+ * 读取Word文件
+ */
+async readWordFile(file) {
+  try {
+    // 动态导入mammoth库
+    const mammoth = await import('mammoth')
+    
+    // 将文件转换为ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer()
+    
+    // 解析Word文档，提取纯文本
+    const result = await mammoth.extractRawText({ arrayBuffer })
+    
+    // 检查是否有警告信息
+    if (result.messages && result.messages.length > 0) {
+      console.warn('Word解析警告:', result.messages)
+    }
+    
+    return result.value || ''
+  } catch (error) {
+    console.error('Word文件解析失败:', error)
+    // 返回错误信息而不是抛出异常，保持原有的错误处理逻辑
+    return `Word文件解析失败: ${error.message}`
   }
+}
 
-  /**
-   * 读取PDF文件（简化版，实际需要专门的库）
-   */
-  async readPdfFile(file) {
-    // 这里是简化实现，实际应用中需要使用pdf.js等库
-    console.warn('PDF文件解析功能需要额外的库支持')
-    return `PDF文件内容提取功能开发中... 文件名: ${file.name}`
-  }
+/**
+* 读取PDF文件（简化版，实际需要专门的库）
+*/
 
+async readPdfFile(file) {
+
+// 这里是简化实现，实际应用中需要使用pdf.js等库
+
+console.warn('PDF文件解析功能需要额外的库支持')
+
+return `PDF文件内容提取功能开发中... 文件名: ${file.name}`
+
+}
   /**
    * 构建题目生成提示词
    */
