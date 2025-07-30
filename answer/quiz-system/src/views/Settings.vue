@@ -100,20 +100,68 @@
         </div>
       </div>
 
+      <!-- 测试连接结果 -->
+      <div v-if="testResult" class="mt-6 p-4 rounded-lg border" :class="{
+        'bg-green-50 border-green-200': testResult.success,
+        'bg-red-50 border-red-200': !testResult.success
+      }">
+        <div class="flex items-start">
+          <div class="flex-shrink-0">
+            <svg v-if="testResult.success" class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <svg v-else class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3 flex-1">
+            <h3 class="text-sm font-medium" :class="{
+              'text-green-800': testResult.success,
+              'text-red-800': !testResult.success
+            }">
+              {{ testResult.message }}
+            </h3>
+            <div class="mt-2 text-sm" :class="{
+              'text-green-700': testResult.success,
+              'text-red-700': !testResult.success
+            }">
+              <div class="space-y-1">
+                <p><span class="font-medium">提供商:</span> {{ testResult.details.provider }}</p>
+                <p><span class="font-medium">模型:</span> {{ testResult.details.model }}</p>
+                <p v-if="testResult.details.latency"><span class="font-medium">延迟:</span> {{ testResult.details.latency }}</p>
+                <p v-if="testResult.details.status"><span class="font-medium">状态:</span> {{ testResult.details.status }}</p>
+                <p v-if="testResult.details.response"><span class="font-medium">响应:</span> {{ testResult.details.response }}</p>
+                <p v-if="testResult.details.error" class="text-red-600"><span class="font-medium">错误:</span> {{ testResult.details.error }}</p>
+                <p v-if="testResult.details.suggestion" class="font-medium text-blue-600">💡 {{ testResult.details.suggestion }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 操作按钮 -->
       <div class="flex justify-end space-x-4 mt-6">
         <button 
           @click="testConnection"
-          :disabled="currentProvider !== 'mock' && !apiKey"
-          class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="(currentProvider !== 'mock' && !apiKey) || isTestingConnection"
+          class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
         >
-          测试连接
+          <svg v-if="isTestingConnection" class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ isTestingConnection ? '测试中...' : '测试连接' }}
         </button>
         <button 
           @click="saveConfig"
-          class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          :disabled="isSaving"
+          class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
         >
-          保存配置
+          <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ isSaving ? '保存中...' : '保存配置' }}
         </button>
       </div>
     </div>
@@ -136,6 +184,7 @@
 import { ref, onMounted } from 'vue'
 import { useAIStore } from '../store'
 import { AI_CONFIGS } from '../services/aiService'
+import aiService from '../services/aiService'
 
 const aiStore = useAIStore()
 const aiConfigs = AI_CONFIGS
@@ -144,10 +193,16 @@ const aiConfigs = AI_CONFIGS
 const currentProvider = ref('mock')
 const apiKey = ref('')
 const customBaseURL = ref('')
+const isTestingConnection = ref(false)
+const testResult = ref(null)
+const isSaving = ref(false)
 
 // 选择AI提供商
 const selectProvider = (provider) => {
   currentProvider.value = provider
+  // 清空测试结果
+  testResult.value = null
+  
   // 清空API密钥和自定义地址
   if (provider === 'mock') {
     apiKey.value = ''
@@ -155,21 +210,62 @@ const selectProvider = (provider) => {
   } else if (provider === 'qwen') {
     // 通义千问已有预配置的API密钥
     apiKey.value = aiConfigs.qwen.headers.Authorization.replace('Bearer ', '')
+  } else {
+    // 其他提供商清空密钥
+    apiKey.value = ''
+    customBaseURL.value = ''
   }
 }
 
 // 测试连接
 const testConnection = async () => {
+  if (isTestingConnection.value) return
+  
+  isTestingConnection.value = true
+  testResult.value = null
+  
   try {
-    // 这里可以添加测试连接的逻辑
-    alert('连接测试成功！')
+    // 临时更新aiService配置进行测试
+    const tempConfig = {
+      provider: currentProvider.value,
+      apiKey: apiKey.value,
+      customBaseURL: customBaseURL.value
+    }
+    
+    // 保存当前配置
+    const originalConfig = { ...aiService.config }
+    
+    // 应用测试配置
+    aiService.updateConfig(tempConfig)
+    
+    // 执行连接测试
+    const result = await aiService.testConnection()
+    
+    // 恢复原配置
+    aiService.updateConfig(originalConfig)
+    
+    testResult.value = result
+    
   } catch (error) {
-    alert('连接测试失败：' + error.message)
+    testResult.value = {
+      success: false,
+      message: '连接测试异常',
+      details: {
+        error: error.message,
+        suggestion: '请检查网络连接和配置信息'
+      }
+    }
+  } finally {
+    isTestingConnection.value = false
   }
 }
 
 // 保存配置
 const saveConfig = async () => {
+  if (isSaving.value) return
+  
+  isSaving.value = true
+  
   try {
     const config = {
       provider: currentProvider.value,
@@ -178,9 +274,26 @@ const saveConfig = async () => {
     }
     
     await aiStore.updateConfig(config)
-    alert('配置保存成功！')
+    
+    // 显示成功消息
+    showMessage('配置保存成功！', 'success')
+    
   } catch (error) {
-    alert('配置保存失败：' + error.message)
+    showMessage('配置保存失败：' + error.message, 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// 显示消息
+const showMessage = (message, type = 'info') => {
+  // 这里可以集成更好的消息提示组件
+  if (type === 'success') {
+    alert('✅ ' + message)
+  } else if (type === 'error') {
+    alert('❌ ' + message)
+  } else {
+    alert('ℹ️ ' + message)
   }
 }
 

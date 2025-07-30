@@ -1,10 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home from '../views/Home.vue'
-import Import from '../views/Import.vue'
-import Quiz from '../views/Quiz.vue'
-import History from '../views/History.vue'
-import QuizResult from '../views/QuizResult.vue'
-import Settings from '../views/Settings.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,32 +6,37 @@ const router = createRouter({
     {
       path: '/',
       name: 'Home',
-      component: Home
+      component: () => import('../views/Home.vue')
     },
     {
       path: '/import',
       name: 'Import',
-      component: Import
+      component: () => import('../views/Import.vue')
     },
     {
       path: '/quiz',
       name: 'Quiz',
-      component: Quiz
+      component: () => import('../views/Quiz.vue')
     },
     {
       path: '/quiz/result',
       name: 'QuizResult',
-      component: QuizResult
+      component: () => import('../views/QuizResult.vue')
     },
     {
       path: '/history',
       name: 'History',
-      component: History
+      component: () => import('../views/History.vue')
     },
     {
       path: '/settings',
       name: 'Settings',
-      component: Settings
+      component: () => import('../views/Settings.vue')
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'NotFound',
+      component: () => import('../views/NotFound.vue')
     }
   ]
 })

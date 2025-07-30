@@ -369,6 +369,164 @@ ${questionAnswerPairs}
   }
   
   /**
+   * 测试AI连接
+   */
+  async testConnection() {
+    const config = this.getCurrentConfig()
+    
+    // 模拟AI测试
+    if (this.config.provider === 'mock') {
+      // 模拟网络延迟
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      return {
+        success: true,
+        message: '模拟AI连接测试成功！',
+        details: {
+          provider: config.name,
+          model: config.model,
+          latency: '1000ms',
+          status: '正常'
+        }
+      }
+    }
+    
+    try {
+      const startTime = Date.now()
+      let requestBody
+      let endpoint
+      
+      // 构建测试请求
+      const testPrompt = '你好，这是一个连接测试。请简单回复"连接成功"。'
+      
+      switch (this.config.provider) {
+        case 'openai':
+        case 'zhipu':
+          endpoint = `${config.baseURL}/chat/completions`
+          requestBody = {
+            model: config.model,
+            messages: [{ role: 'user', content: testPrompt }],
+            max_tokens: 50,
+            temperature: 0.1
+          }
+          break
+          
+        case 'qwen':
+          endpoint = config.baseURL
+          requestBody = {
+            model: config.model,
+            messages: [{ role: 'user', content: testPrompt }],
+            max_tokens: 50,
+            temperature: 0.1
+          }
+          break
+          
+        case 'ernie':
+          endpoint = `${config.baseURL}/chat/completions?access_token=${config.apiKey}`
+          requestBody = {
+            messages: [{ role: 'user', content: testPrompt }],
+            max_output_tokens: 50,
+            temperature: 0.1
+          }
+          break
+          
+        default:
+          throw new Error(`不支持的AI提供商: ${this.config.provider}`)
+      }
+      
+      // 构建请求头
+      const headers = { ...config.headers }
+      if (headers.Authorization && config.apiKey) {
+        headers.Authorization = headers.Authorization.replace('{API_KEY}', config.apiKey)
+      }
+      
+      // 发送测试请求
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody)
+      })
+      
+      const latency = Date.now() - startTime
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`)
+      }
+      
+      const data = await response.json()
+      
+      // 验证响应格式
+      let content
+      switch (this.config.provider) {
+        case 'openai':
+        case 'zhipu':
+          content = data.choices?.[0]?.message?.content
+          break
+        case 'qwen':
+          content = data.choices?.[0]?.message?.content
+          break
+        case 'ernie':
+          content = data.result
+          break
+      }
+      
+      if (!content) {
+        throw new Error('AI响应格式异常，未找到有效内容')
+      }
+      
+      return {
+        success: true,
+        message: 'AI连接测试成功！',
+        details: {
+          provider: config.name,
+          model: config.model,
+          latency: `${latency}ms`,
+          status: '正常',
+          response: content.substring(0, 100) + (content.length > 100 ? '...' : '')
+        }
+      }
+      
+    } catch (error) {
+      console.error('AI连接测试失败:', error)
+      
+      // 分析错误类型
+      let errorType = '未知错误'
+      let suggestion = '请检查网络连接和配置信息'
+      
+      if (error.message.includes('401')) {
+        errorType = 'API密钥错误'
+        suggestion = '请检查API密钥是否正确'
+      } else if (error.message.includes('403')) {
+        errorType = '权限不足'
+        suggestion = '请检查API密钥权限或账户余额'
+      } else if (error.message.includes('404')) {
+        errorType = 'API地址错误'
+        suggestion = '请检查API地址是否正确'
+      } else if (error.message.includes('429')) {
+        errorType = '请求频率限制'
+        suggestion = '请稍后再试，或检查API配额'
+      } else if (error.message.includes('500')) {
+        errorType = '服务器错误'
+        suggestion = 'AI服务暂时不可用，请稍后再试'
+      } else if (error.message.includes('NetworkError') || error.message.includes('fetch')) {
+        errorType = '网络连接错误'
+        suggestion = '请检查网络连接'
+      }
+      
+      return {
+        success: false,
+        message: `连接测试失败: ${errorType}`,
+        details: {
+          provider: config.name,
+          model: config.model,
+          error: error.message,
+          suggestion: suggestion
+        }
+      }
+    }
+  }
+
+  /**
    * 主要的评估方法
    */
   async evaluateAnswers(questions, answers) {

@@ -41,6 +41,14 @@
           生成题库
         </span>
       </div>
+      
+      <!-- 状态指示器 -->
+      <div v-if="importStore.hasTempState && !showRestoreDialog" class="ml-6 flex items-center text-sm text-green-600">
+        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+        </svg>
+        <span>进度已保存</span>
+      </div>
     </div>
 
     <!-- 步骤1: 文件上传 -->
@@ -243,7 +251,10 @@
         <div class="text-center py-8">
           <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">AI正在生成题库...</h3>
-          <p class="text-gray-600">{{ generationProgress }}</p>
+          <p class="text-gray-600 mb-4">{{ generationProgress }}</p>
+          <button @click="cancelGeneration" class="btn-secondary">
+            取消生成
+          </button>
         </div>
       </div>
 
@@ -377,30 +388,58 @@
         </div>
       </div>
     </div>
+
+    <!-- 状态恢复对话框 -->
+    <div v-if="showRestoreDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+        <div class="text-center">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+          </div>
+          <h3 class="text-lg font-medium text-gray-900 mb-2">发现未完成的题库生成</h3>
+          <p class="text-gray-600 mb-6">检测到您之前有未完成的题库生成流程，是否要恢复之前的进度？</p>
+          <div class="flex space-x-3">
+            <button @click="rejectRestore" class="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">
+              重新开始
+            </button>
+            <button @click="confirmRestore" class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+              恢复进度
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useQuestionStore } from '../store'
-import { useAIStore } from '../store'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { useQuestionStore, useAIStore, useImportStore } from '../store'
 import aiService from '../services/aiService'
+import generationService from '../services/generationService'
 
 const questionStore = useQuestionStore()
 const aiStore = useAIStore()
+const importStore = useImportStore()
 
 // 响应式数据
-const currentStep = ref(1)
-const uploadedFiles = ref([])
-const bankName = ref('')
-const bankDescription = ref('')
+const currentStep = ref(importStore.currentStep || 1)
 const isDragging = ref(false)
+const uploadedFiles = ref(importStore.uploadedFiles || [])
+const bankName = ref(importStore.bankName || '')
+const bankDescription = ref(importStore.bankDescription || '')
 const showSuccess = ref(false)
-const isGenerating = ref(false)
-const generationProgress = ref('')
-const generatedQuestions = ref([])
+const generatedQuestions = ref(importStore.generatedQuestions || [])
+
+// 使用store中的生成状态
+const isGenerating = computed(() => importStore.generationState.isGenerating)
+const generationProgress = computed(() => importStore.generationState.progress)
 const editingIndex = ref(-1)
 const editForm=ref(null)
+const showRestoreDialog = ref(false)
+const isInitialized = ref(false)
 
 // 题目类型配置
 const questionTypes = ref([
@@ -411,10 +450,10 @@ const questionTypes = ref([
 ])
 
 // 选中的题目类型
-const selectedTypes = ref(['choice'])
+const selectedTypes = ref(importStore.selectedTypes || ['choice'])
 
 // 题目数量配置
-const questionCounts = ref({
+const questionCounts = ref(importStore.questionCounts || {
   choice: 5,
   fill: 3,
   essay: 2,
@@ -422,7 +461,7 @@ const questionCounts = ref({
 })
 
 // 难度分布
-const difficulty = ref({
+const difficulty = ref(importStore.difficulty || {
   easy: 40,
   medium: 40,
   hard: 20
@@ -542,8 +581,6 @@ const generateQuestions = async () => {
   }
   
   currentStep.value = 3
-  isGenerating.value = true
-  generationProgress.value = '正在分析上传的资料...'
   
   try {
     // 准备题目配置
@@ -553,43 +590,17 @@ const generateQuestions = async () => {
       difficulty: difficulty.value
     }
     
-    generationProgress.value = '正在提取文档内容...'
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // 使用生成服务开始后台生成
+    const generationId = await generationService.startGeneration(
+      uploadedFiles.value,
+      questionConfig
+    )
     
-    // 检查AI配置
-    const currentAIConfig = aiStore.config
-    if (currentAIConfig.provider === 'mock') {
-      // 使用模拟生成
-      generationProgress.value = '正在生成题目（模拟模式）...'
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      const questions = aiService.generateMockQuestions(questionConfig)
-      generatedQuestions.value = questions
-    } else {
-      // 使用真实AI生成
-      generationProgress.value = '正在调用AI生成题目...'
-      
-      // 更新AI服务配置
-      aiService.updateConfig(currentAIConfig)
-      
-      // 调用AI生成题目
-      const questions = await aiService.generateQuestions(uploadedFiles.value, questionConfig)
-      
-      if (questions.length === 0) {
-        throw new Error('AI未能生成任何题目，请检查文档内容或重试')
-      }
-      
-      generatedQuestions.value = questions
-    }
-    
-    generationProgress.value = '题目生成完成！'
-    await new Promise(resolve => setTimeout(resolve, 500))
-    isGenerating.value = false
+    console.log('生成任务已启动，ID:', generationId)
     
   } catch (error) {
-    console.error('生成题库失败:', error)
-    alert(`生成题库失败：${error.message}`)
-    isGenerating.value = false
+    console.error('启动生成任务失败:', error)
+    alert(`启动生成任务失败：${error.message}`)
   }
 }
 
@@ -633,6 +644,18 @@ const regenerateQuestions = () => {
   generateQuestions()
 }
 
+// 取消生成
+const cancelGeneration = () => {
+  if (importStore.generationState.generationId) {
+    generationService.cancelGeneration(importStore.generationState.generationId)
+    console.log('已取消生成任务')
+  }
+  // 返回到参数设置页面
+  currentStep.value = 2
+  // 清空已生成的题目
+  generatedQuestions.value = []
+}
+
 // 导入题库
 const importQuestions = () => {
   if (!bankName.value.trim()) {
@@ -651,6 +674,9 @@ const importQuestions = () => {
       description: bankDescription.value.trim(),
       questions: generatedQuestions.value
     })
+    
+    // 清空临时状态
+    importStore.clearTempState()
     
     showSuccess.value = true
     
@@ -672,7 +698,7 @@ const continueImport = () => {
 }
 
 // 清空数据
-const clearData = () => {
+const clearData = (clearStore = true) => {
   currentStep.value = 1
   uploadedFiles.value = []
   bankName.value = ''
@@ -681,5 +707,107 @@ const clearData = () => {
   selectedTypes.value = ['choice']
   questionCounts.value = { choice: 5, fill: 3, essay: 2, judge: 3 }
   difficulty.value = { easy: 40, medium: 40, hard: 20 }
+  
+  // 清空store中的临时状态
+  if (clearStore) {
+    importStore.clearTempState()
+  }
 }
+
+// 保存当前状态到store
+const saveCurrentState = () => {
+  importStore.saveTempState({
+    currentStep: currentStep.value,
+    uploadedFiles: uploadedFiles.value,
+    bankName: bankName.value,
+    bankDescription: bankDescription.value,
+    selectedTypes: selectedTypes.value,
+    questionCounts: questionCounts.value,
+    difficulty: difficulty.value,
+    generatedQuestions: generatedQuestions.value,
+    generationState: importStore.generationState
+  })
+}
+
+// 从store恢复状态
+const restoreState = () => {
+  if (importStore.hasTempState) {
+    currentStep.value = importStore.currentStep
+    uploadedFiles.value = importStore.uploadedFiles
+    bankName.value = importStore.bankName
+    bankDescription.value = importStore.bankDescription
+    selectedTypes.value = importStore.selectedTypes
+    questionCounts.value = importStore.questionCounts
+    difficulty.value = importStore.difficulty
+    generatedQuestions.value = importStore.generatedQuestions
+  }
+}
+
+// 确认恢复状态
+const confirmRestore = () => {
+  restoreState()
+  showRestoreDialog.value = false
+  // 恢复完成后开始自动保存
+  isInitialized.value = true
+}
+
+// 拒绝恢复状态
+const rejectRestore = () => {
+  importStore.clearTempState()
+  showRestoreDialog.value = false
+  // 重置组件状态，但不重复清理store
+  clearData(false)
+  // 重新开始后开始自动保存
+  isInitialized.value = true
+}
+
+// 组件挂载时检查是否有临时状态
+onMounted(() => {
+  // 重新检查是否有有效的临时状态
+  const hasValidTemp = importStore.hasValidTempData()
+  importStore.hasTempState = hasValidTemp
+  
+  // 检查是否有正在进行的生成任务
+  if (importStore.generationState.isGenerating) {
+    console.log('检测到正在进行的生成任务，恢复生成状态')
+    currentStep.value = 3
+    // 同步生成的题目
+    generatedQuestions.value = importStore.generatedQuestions
+  }
+  
+  if (hasValidTemp) {
+    showRestoreDialog.value = true
+    // 等待用户选择，不立即设置初始化标志
+  } else {
+    // 如果没有临时状态，确保组件状态是初始状态
+    clearData(false)
+    // 标记组件已初始化，开始自动保存
+    isInitialized.value = true
+  }
+})
+
+// 监听状态变化，自动保存
+watch([currentStep, uploadedFiles, bankName, bankDescription, selectedTypes, questionCounts, difficulty, generatedQuestions], () => {
+  if (isInitialized.value) {
+    saveCurrentState()
+  }
+}, { deep: true })
+
+// 监听store中的生成结果变化
+watch(() => importStore.generatedQuestions, (newQuestions) => {
+  generatedQuestions.value = newQuestions
+}, { deep: true })
+
+// 监听生成状态变化，检查是否需要恢复生成状态
+watch(() => importStore.generationState.isGenerating, (isGenerating) => {
+  if (isGenerating && currentStep.value < 3) {
+    // 如果有生成任务在进行且当前不在第三步，自动跳转到第三步
+    currentStep.value = 3
+  }
+})
+
+// 组件卸载前保存状态
+onBeforeUnmount(() => {
+  saveCurrentState()
+})
 </script>

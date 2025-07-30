@@ -120,6 +120,173 @@ export const useQuestionStore = defineStore('questions', {
   }
 })
 
+// 题目生成临时状态store
+export const useImportStore = defineStore('import', {
+  state: () => ({
+    // 当前步骤
+    currentStep: 1,
+    // 上传的文件
+    uploadedFiles: [],
+    // 题库基本信息
+    bankName: '',
+    bankDescription: '',
+    // 选中的题目类型
+    selectedTypes: ['choice'],
+    // 题目数量配置
+    questionCounts: {
+      choice: 5,
+      fill: 3,
+      essay: 2,
+      judge: 3
+    },
+    // 难度分布
+    difficulty: {
+      easy: 40,
+      medium: 40,
+      hard: 20
+    },
+    // 生成的题目
+    generatedQuestions: [],
+    // 是否有临时状态
+    hasTempState: false,
+    // 生成状态管理
+    generationState: {
+      isGenerating: false,
+      progress: '',
+      startTime: null,
+      generationId: null
+    }
+  }),
+  
+  actions: {
+    // 保存临时状态
+    saveTempState(state) {
+      this.currentStep = state.currentStep || 1
+      this.uploadedFiles = state.uploadedFiles || []
+      this.bankName = state.bankName || ''
+      this.bankDescription = state.bankDescription || ''
+      this.selectedTypes = state.selectedTypes || ['choice']
+      this.questionCounts = state.questionCounts || {
+        choice: 5,
+        fill: 3,
+        essay: 2,
+        judge: 3
+      }
+      this.difficulty = state.difficulty || {
+        easy: 40,
+        medium: 40,
+        hard: 20
+      }
+      this.generatedQuestions = state.generatedQuestions || []
+      
+      // 保存生成状态（如果提供）
+      if (state.generationState) {
+        this.generationState = { ...state.generationState }
+      }
+      
+      // 只有在真正有有效数据时才标记为有临时状态
+      this.hasTempState = this.hasValidTempData()
+    },
+    
+    // 清空临时状态
+    clearTempState() {
+      this.currentStep = 1
+      this.uploadedFiles = []
+      this.bankName = ''
+      this.bankDescription = ''
+      this.selectedTypes = ['choice']
+      this.questionCounts = {
+        choice: 5,
+        fill: 3,
+        essay: 2,
+        judge: 3
+      }
+      this.difficulty = {
+        easy: 40,
+        medium: 40,
+        hard: 20
+      }
+      this.generatedQuestions = []
+      this.hasTempState = false
+      // 重置生成状态
+      this.generationState = {
+        isGenerating: false,
+        progress: '',
+        startTime: null,
+        generationId: null
+      }
+    },
+    
+    // 获取当前状态
+    getCurrentState() {
+      return {
+        currentStep: this.currentStep,
+        uploadedFiles: this.uploadedFiles,
+        bankName: this.bankName,
+        bankDescription: this.bankDescription,
+        selectedTypes: this.selectedTypes,
+        questionCounts: this.questionCounts,
+        difficulty: this.difficulty,
+        generatedQuestions: this.generatedQuestions
+      }
+    },
+    
+    // 检查是否有有效的临时数据
+    hasValidTempData() {
+      // 如果有上传的文件，或者有自定义的题库名称，或者步骤不是1，或者有生成的题目，则认为有有效数据
+      return this.uploadedFiles.length > 0 || 
+             this.bankName.trim() !== '' || 
+             this.currentStep > 1 || 
+             this.generatedQuestions.length > 0
+    },
+    
+    // 开始生成
+    startGeneration(config) {
+      const generationId = Date.now().toString()
+      this.generationState = {
+        isGenerating: true,
+        progress: '正在分析上传的资料...',
+        startTime: new Date().toISOString(),
+        generationId: generationId
+      }
+      return generationId
+    },
+    
+    // 更新生成进度
+    updateGenerationProgress(progress) {
+      if (this.generationState.isGenerating) {
+        this.generationState.progress = progress
+      }
+    },
+    
+    // 完成生成
+    completeGeneration(questions) {
+      this.generatedQuestions = questions || []
+      this.generationState = {
+        isGenerating: false,
+        progress: '题目生成完成！',
+        startTime: null,
+        generationId: null
+      }
+    },
+    
+    // 生成失败
+    failGeneration(error) {
+      this.generationState = {
+        isGenerating: false,
+        progress: `生成失败：${error}`,
+        startTime: null,
+        generationId: null
+      }
+    }
+  },
+  
+  persist: {
+    key: 'quiz-import-store',
+    storage: localStorage
+  }
+})
+
 // AI服务store
 export const useAIStore = defineStore('ai', {
   state: () => ({

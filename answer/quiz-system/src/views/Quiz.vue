@@ -52,15 +52,26 @@
               >
                 {{ bank.name }} ({{ bank.questions.length }} 题)
               </span>
-              <button 
-                @click.stop="deleteBankWithConfirm(bank)"
-                class="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity ml-2"
-                title="删除题库"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </button>
+              <div class="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                  @click.stop="exportBankToWord(bank)"
+                  class="text-blue-500 hover:text-blue-700"
+                  title="导出为Word"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                </button>
+                <button 
+                  @click.stop="deleteBankWithConfirm(bank)"
+                  class="text-red-500 hover:text-red-700"
+                  title="删除题库"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -303,9 +314,17 @@
             <button 
               v-else
               @click="finishQuiz"
-              class="btn-primary bg-green-600 hover:bg-green-700"
+              :disabled="isEvaluating"
+              class="btn-primary bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              完成答题
+              <span v-if="!isEvaluating">完成答题</span>
+              <span v-else class="flex items-center">
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                评估中...
+              </span>
             </button>
           </div>
         </div>
@@ -353,6 +372,51 @@
         去导入题库
       </router-link>
     </div>
+
+    <!-- 评估进度弹窗 -->
+    <div v-if="isEvaluating" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4 text-center">
+        <div class="mb-6">
+          <div class="w-16 h-16 mx-auto mb-4 relative">
+            <svg class="w-16 h-16 text-primary-600 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold text-gray-900 mb-2">正在评估答题结果</h3>
+          <p class="text-gray-600 mb-4">AI正在分析您的答案，请稍候...</p>
+        </div>
+        
+        <!-- 进度条 -->
+        <div class="mb-4">
+          <div class="flex justify-between text-sm text-gray-600 mb-2">
+            <span>评估进度</span>
+            <span>{{ Math.round(evaluationProgress) }}%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              class="bg-primary-600 h-2 rounded-full transition-all duration-500 ease-out"
+              :style="{ width: `${evaluationProgress}%` }"
+            ></div>
+          </div>
+        </div>
+        
+        <!-- 评估阶段提示 -->
+        <div class="text-sm text-gray-500">
+          <p v-if="evaluationProgress < 30">正在分析题目内容...</p>
+          <p v-else-if="evaluationProgress < 60">正在评估答案准确性...</p>
+          <p v-else-if="evaluationProgress < 90">正在生成详细反馈...</p>
+          <p v-else>即将完成评估...</p>
+        </div>
+        
+        <!-- 温馨提示 -->
+        <div class="mt-6 p-3 bg-blue-50 rounded-lg">
+          <p class="text-xs text-blue-700">
+            💡 评估时间取决于题目数量和AI服务响应速度，通常需要10-30秒
+          </p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -373,6 +437,8 @@ const currentQuestionIndex = ref(0)
 const currentAnswer = ref('')
 const showAnswer = ref(false)
 const showDropdown = ref(false)
+const isEvaluating = ref(false)
+const evaluationProgress = ref(0)
 
 // 计算属性
 const selectedBank = computed(() => {
@@ -525,6 +591,139 @@ const exitQuiz = () => {
   }
 }
 
+const exportBankToWord = async (bank) => {
+  try {
+    // 动态导入docx库
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
+    
+    // 创建文档内容
+    const children = []
+    
+    // 添加标题
+    children.push(
+      new Paragraph({
+        text: bank.name,
+        heading: HeadingLevel.TITLE,
+      })
+    )
+    
+    // 添加题库信息
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `题库描述：${bank.description || '暂无描述'}`,
+            break: 1,
+          }),
+          new TextRun({
+            text: `题目总数：${bank.questions.length} 题`,
+            break: 1,
+          }),
+          new TextRun({
+            text: `导出时间：${new Date().toLocaleString()}`,
+            break: 2,
+          }),
+        ],
+      })
+    )
+    
+    // 添加题目
+    bank.questions.forEach((question, index) => {
+      // 题目标题
+      children.push(
+        new Paragraph({
+          text: `第${index + 1}题 [${question.type}]`,
+          heading: HeadingLevel.HEADING_2,
+        })
+      )
+      
+      // 题目内容
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `题目：${question.question}`,
+              break: 1,
+            }),
+          ],
+        })
+      )
+      
+      // 选择题选项
+      if (question.type === 'choice' && question.options) {
+        question.options.forEach((option, optionIndex) => {
+          children.push(
+            new Paragraph({
+              text: `${String.fromCharCode(65 + optionIndex)}. ${option}`,
+            })
+          )
+        })
+      }
+      
+      // 答案
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `答案：${question.answer}`,
+              bold: true,
+              break: 1,
+            }),
+          ],
+        })
+      )
+      
+      // 解析（如果有）
+      if (question.explanation) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `解析：${question.explanation}`,
+                break: 1,
+              }),
+            ],
+          })
+        )
+      }
+      
+      // 添加分隔线
+      children.push(
+        new Paragraph({
+          text: '————————————————————————————————————————',
+          break: 1,
+        })
+      )
+    })
+    
+    // 创建文档
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: children,
+        },
+      ],
+    })
+    
+    // 生成并下载文件
+    const blob = await Packer.toBlob(doc)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${bank.name}_题库.docx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    alert(`题库「${bank.name}」已成功导出为Word文档`)
+  } catch (error) {
+    console.error('导出Word文档失败:', error)
+    alert('导出失败，请稍后重试')
+  }
+}
+
 const deleteBankWithConfirm = (bank) => {
   const confirmed = confirm(`确定要删除题库「${bank.name}」吗？\n\n此操作不可撤销，题库中的所有题目都将被永久删除。`)
   if (confirmed) {
@@ -572,7 +771,18 @@ const finishQuiz = async () => {
     if (!confirmed) return
   }
   
+  // 显示评估进度弹窗
+  isEvaluating.value = true
+  evaluationProgress.value = 0
+  
   try {
+    // 模拟进度更新
+    const progressInterval = setInterval(() => {
+      if (evaluationProgress.value < 90) {
+        evaluationProgress.value += Math.random() * 15
+      }
+    }, 500)
+    
     // 这里会调用AI评估
     const aiStore = useAIStore()
     const evaluation = await aiStore.evaluateAnswers(
@@ -580,8 +790,18 @@ const finishQuiz = async () => {
       currentQuiz.value.answers
     )
     
+    // 清除进度定时器
+    clearInterval(progressInterval)
+    evaluationProgress.value = 100
+    
+    // 短暂延迟显示完成状态
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
     // 完成答题并保存结果
     const result = questionStore.finishQuiz(evaluation)
+    
+    // 隐藏评估弹窗
+    isEvaluating.value = false
     
     // 跳转到结果页面
     router.push({
@@ -590,6 +810,7 @@ const finishQuiz = async () => {
     })
   } catch (error) {
     console.error('答题完成失败:', error)
+    isEvaluating.value = false
     alert('评估过程中出现错误，请稍后重试')
   }
 }
