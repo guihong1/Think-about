@@ -17,64 +17,14 @@
       <!-- 选择题库 -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">选择题库</label>
-        <div class="relative">
-          <div 
-            @click="toggleDropdown"
-            class="input-field cursor-pointer flex items-center justify-between"
-          >
-            <span class="text-gray-900">
-              {{ selectedBankName || '请选择题库' }}
-            </span>
-            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-            </svg>
-          </div>
-          
-          <!-- 自定义下拉选项 -->
-          <div 
-            v-if="showDropdown" 
-            class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
-          >
-            <div 
-              @click="selectBank('')"
-              class="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-500"
-            >
-              请选择题库
-            </div>
-            <div 
-              v-for="bank in questionStore.questionBanks" 
-              :key="bank.id"
-              class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between group"
-            >
-              <span 
-                @click="selectBank(bank.id)"
-                class="flex-1 text-gray-900"
-              >
-                {{ bank.name }} ({{ bank.questions.length }} 题)
-              </span>
-              <div class="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  @click.stop="exportBankToWord(bank)"
-                  class="text-blue-500 hover:text-blue-700"
-                  title="导出为Word"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                  </svg>
-                </button>
-                <button 
-                  @click.stop="deleteBankWithConfirm(bank)"
-                  class="text-red-500 hover:text-red-700"
-                  title="删除题库"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <VirtualBankSelector
+          :question-banks="questionStore.questionBanks"
+          :selected-bank-id="selectedBankId"
+          :selected-bank-name="selectedBankName"
+          @select-bank="selectBank"
+          @export-bank="exportBankToWord"
+          @delete-bank="deleteBankWithConfirm"
+        />
       </div>
 
       <!-- 题库信息 -->
@@ -424,6 +374,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuestionStore, useAIStore } from '../store'
+import VirtualBankSelector from '../components/VirtualBankSelector.vue'
 
 const router = useRouter()
 const questionStore = useQuestionStore()
@@ -436,7 +387,6 @@ const quizMode = ref('practice')
 const currentQuestionIndex = ref(0)
 const currentAnswer = ref('')
 const showAnswer = ref(false)
-const showDropdown = ref(false)
 const isEvaluating = ref(false)
 const evaluationProgress = ref(0)
 
@@ -495,13 +445,9 @@ watch(currentAnswer, (newAnswer) => {
 })
 
 // 方法
-const toggleDropdown = () => {
-  showDropdown.value = !showDropdown.value
-}
 
 const selectBank = (bankId) => {
   selectedBankId.value = bankId
-  showDropdown.value = false
   if (bankId && selectedBank.value) {
     questionStore.selectBank(selectedBankId.value)
     selectedTypes.value = [...availableTypes.value] // 默认选择所有题型
@@ -737,29 +683,10 @@ const deleteBankWithConfirm = (bank) => {
     // 删除题库
     questionStore.deleteBank(bank.id)
     
-    // 关闭下拉框
-    showDropdown.value = false
-    
     // 显示删除成功提示
     alert(`题库「${bank.name}」已成功删除`)
   }
 }
-
-// 点击外部关闭下拉框
-const handleClickOutside = (event) => {
-  const dropdown = event.target.closest('.relative')
-  if (!dropdown) {
-    showDropdown.value = false
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
 
 const finishQuiz = async () => {
   if (!currentQuiz.value) return

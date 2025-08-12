@@ -30,201 +30,18 @@
       </div>
     </div>
 
-    <!-- 筛选和排序 -->
-    <div class="card">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-        <div class="flex flex-wrap gap-4">
-          <!-- 题库筛选 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">题库筛选</label>
-            <select v-model="filterBank" class="input-field w-48">
-              <option value="">全部题库</option>
-              <option v-for="bank in availableBanks" :key="bank" :value="bank">
-                {{ bank }}
-              </option>
-            </select>
-          </div>
-          
-          <!-- 分数筛选 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">分数筛选</label>
-            <select v-model="filterScore" class="input-field w-32">
-              <option value="">全部</option>
-              <option value="90">90分以上</option>
-              <option value="80">80-89分</option>
-              <option value="70">70-79分</option>
-              <option value="60">60-69分</option>
-              <option value="0">60分以下</option>
-            </select>
-          </div>
-        </div>
-        
-        <div class="flex items-center space-x-4">
-          <!-- 排序 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">排序方式</label>
-            <select v-model="sortBy" class="input-field w-32">
-              <option value="date">按时间</option>
-              <option value="score">按分数</option>
-              <option value="bank">按题库</option>
-            </select>
-          </div>
-          
-          <!-- 清空历史 -->
-          <button 
-            @click="clearHistory"
-            class="btn-secondary mt-6"
-            :disabled="filteredHistory.length === 0"
-          >
-            清空历史
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 虚拟滚动历史记录列表 -->
+    <VirtualHistoryList
+      :history-records="transformedHistoryRecords"
+      @clear-history="clearHistory"
+      @view-record="viewResult"
+      @restart-quiz="restartQuiz"
+      @delete-record="deleteQuiz"
+      @review-wrong-questions="reviewWrongQuestions"
+      @clear-filters="clearFilters"
+    />
 
-    <!-- 历史记录列表 -->
-    <div v-if="filteredHistory.length > 0" class="space-y-4">
-      <div 
-        v-for="quiz in paginatedHistory" 
-        :key="quiz.id"
-        class="card hover:shadow-lg transition-shadow duration-200"
-      >
-        <div class="flex items-center justify-between">
-          <div class="flex-1">
-            <div class="flex items-center space-x-4 mb-2">
-              <h3 class="text-lg font-semibold text-gray-900">{{ quiz.bankName }}</h3>
-              <span class="px-3 py-1 rounded-full text-sm font-medium"
-                    :class="getScoreBadgeClass(quiz.score)">
-                {{ quiz.score }} 分
-              </span>
-              <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                {{ quiz.mode === 'practice' ? '练习模式' : '考试模式' }}
-              </span>
-            </div>
-            
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-              <div>
-                <span class="font-medium">题目数量：</span>
-                {{ quiz.questions.length }}
-              </div>
-              <div>
-                <span class="font-medium">作答数量：</span>
-                {{ Object.keys(quiz.answers).length }}
-              </div>
-              <div>
-                <span class="font-medium">用时：</span>
-                {{ getQuizDuration(quiz) }}
-              </div>
-              <div>
-                <span class="font-medium">答题时间：</span>
-                {{ formatDate(quiz.endTime) }}
-              </div>
-            </div>
-          </div>
-          
-          <div class="flex items-center space-x-2 ml-4">
-            <button 
-              @click="viewResult(quiz)"
-              class="btn-primary text-sm px-3 py-1"
-            >
-              查看详情
-            </button>
-            <button 
-              @click="deleteQuiz(quiz.id)"
-              class="btn-secondary text-sm px-3 py-1 text-red-600 hover:bg-red-50"
-            >
-              删除
-            </button>
-          </div>
-        </div>
-        
-        <!-- 展开的详细信息 -->
-        <div v-if="expandedQuiz === quiz.id" class="mt-4 pt-4 border-t border-gray-200">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- 分数分布 -->
-            <div>
-              <h4 class="font-medium text-gray-900 mb-3">题目得分分布</h4>
-              <div class="space-y-2">
-                <div v-for="(evaluation, index) in getQuestionEvaluations(quiz)" :key="index"
-                     class="flex items-center justify-between text-sm">
-                  <span class="text-gray-600">第 {{ index + 1 }} 题</span>
-                  <span class="font-medium" :class="getScoreTextClass(evaluation.score)">
-                    {{ evaluation.score }} 分
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            <!-- AI总体评价 -->
-            <div v-if="quiz.aiEvaluation?.overallFeedback">
-              <h4 class="font-medium text-gray-900 mb-3">AI 总体评价</h4>
-              <div class="bg-blue-50 p-3 rounded-lg">
-                <p class="text-blue-900 text-sm">{{ quiz.aiEvaluation.overallFeedback }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- 展开/收起按钮 -->
-        <div class="mt-4 text-center">
-          <button 
-            @click="toggleExpand(quiz.id)"
-            class="text-primary-600 hover:text-primary-700 text-sm font-medium"
-          >
-            {{ expandedQuiz === quiz.id ? '收起详情' : '展开详情' }}
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- 分页 -->
-    <div v-if="totalPages > 1" class="flex justify-center">
-      <nav class="flex items-center space-x-2">
-        <button 
-          @click="currentPage = Math.max(1, currentPage - 1)"
-          :disabled="currentPage === 1"
-          class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          上一页
-        </button>
-        
-        <span class="px-3 py-2 text-sm font-medium text-gray-700">
-          第 {{ currentPage }} 页，共 {{ totalPages }} 页
-        </span>
-        
-        <button 
-          @click="currentPage = Math.min(totalPages, currentPage + 1)"
-          :disabled="currentPage === totalPages"
-          class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          下一页
-        </button>
-      </nav>
-    </div>
-
-    <!-- 空状态 -->
-    <div v-if="questionStore.quizHistory.length === 0" class="card text-center">
-      <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-      </svg>
-      <h3 class="text-lg font-medium text-gray-900 mb-2">暂无答题记录</h3>
-      <p class="text-gray-600 mb-4">开始您的第一次答题吧！</p>
-      <router-link to="/quiz" class="btn-primary">
-        开始答题
-      </router-link>
-    </div>
-
-    <!-- 筛选后无结果 -->
-    <div v-else-if="filteredHistory.length === 0" class="card text-center">
-      <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-      </svg>
-      <h3 class="text-lg font-medium text-gray-900 mb-2">没有找到匹配的记录</h3>
-      <p class="text-gray-600 mb-4">请尝试调整筛选条件</p>
-      <button @click="clearFilters" class="btn-primary">
-        清除筛选
-      </button>
-    </div>
   </div>
 </template>
 
@@ -232,6 +49,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuestionStore } from '../store'
+import VirtualHistoryList from '../components/VirtualHistoryList.vue'
 
 const router = useRouter()
 const questionStore = useQuestionStore()
@@ -325,6 +143,23 @@ const paginatedHistory = computed(() => {
   return filteredHistory.value.slice(start, end)
 })
 
+// 转换历史记录数据格式以适配VirtualHistoryList组件
+const transformedHistoryRecords = computed(() => {
+  return questionStore.quizHistory.map(quiz => ({
+    id: quiz.id,
+    bankName: quiz.bankName,
+    score: quiz.score,
+    mode: quiz.mode,
+    totalQuestions: quiz.questions.length,
+    answeredQuestions: Object.keys(quiz.answers).length,
+    correctAnswers: quiz.aiEvaluation?.questionEvaluations?.filter(e => e.score >= 80).length || 0,
+    duration: getQuizDurationInMinutes(quiz) * 60, // 转换为秒
+    date: quiz.endTime,
+    wrongQuestions: quiz.aiEvaluation?.questionEvaluations?.filter(e => e.score < 80) || [],
+    ...quiz // 保留原始数据
+  }))
+})
+
 // 方法
 const getQuizDuration = (quiz) => {
   const minutes = getQuizDurationInMinutes(quiz)
@@ -377,16 +212,11 @@ const viewResult = (quiz) => {
   })
 }
 
-const deleteQuiz = (quizId) => {
+const deleteQuiz = (record) => {
   if (confirm('确定要删除这条答题记录吗？')) {
-    const index = questionStore.quizHistory.findIndex(quiz => quiz.id === quizId)
+    const index = questionStore.quizHistory.findIndex(quiz => quiz.id === record.id)
     if (index !== -1) {
       questionStore.quizHistory.splice(index, 1)
-    }
-    
-    // 如果当前页没有数据了，回到上一页
-    if (paginatedHistory.value.length === 0 && currentPage.value > 1) {
-      currentPage.value--
     }
   }
 }
@@ -407,5 +237,27 @@ const clearFilters = () => {
 
 const toggleExpand = (quizId) => {
   expandedQuiz.value = expandedQuiz.value === quizId ? null : quizId
+}
+
+// VirtualHistoryList组件的事件处理方法
+const restartQuiz = (record) => {
+  // 重新开始相同配置的测试
+  router.push({
+    name: 'Quiz',
+    query: {
+      bankId: record.bankId,
+      mode: record.mode,
+      questionCount: record.totalQuestions
+    }
+  })
+}
+
+const reviewWrongQuestions = (record) => {
+  // 查看错题详情
+  router.push({
+    name: 'QuizResult',
+    params: { resultId: record.id },
+    query: { showWrongOnly: 'true' }
+  })
 }
 </script>
